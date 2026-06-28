@@ -8,8 +8,6 @@ on:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -125,12 +123,14 @@ jobs:
           print('Env vars updated.')
           "
 
-      - name: Redeploy Vercel (trigger via file change)
+      - name: Redeploy Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          echo "$(date -u)" > vercel/last-refresh.txt
-          git add vercel/last-refresh.txt
-          git commit -m "refresh: $(date -u +%H:%M)"
-          git push origin master
-          echo "Push triggered — Vercel auto-redeploys"
+          # Create .vercel link so CLI finds the project
+          mkdir -p vercel/.vercel
+          echo '{"projectId":"prj_vF0FFLgTH9fymYkGRZ1UQUCQ3Iqs","orgId":"team_WszHZtkfJ7bBENc3nlo7Ot9A","projectName":"vercel"}' > vercel/.vercel/project.json
+          cd vercel
+          npm install -g vercel > /dev/null 2>&1
+          vercel --prod --yes --token $VERCEL_TOKEN
+          echo "Redeployed — live in ~30s"
