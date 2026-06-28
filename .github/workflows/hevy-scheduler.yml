@@ -74,10 +74,10 @@ jobs:
               json.dump(tokens, f)
           "
 
-      - name: API Discovery — Probe POST endpoints
+      - name: API Discovery — Test workout creation
         run: |
           python -c "
-          import json, urllib.request
+          import json, urllib.request, urllib.error
 
           with open('tokens.json') as f:
               tokens = json.load(f)
@@ -91,57 +91,75 @@ jobs:
               'Accept': 'application/json',
           }
 
-          def probe(method, path, body=None):
+          def call(method, path, body=None):
               url = f'https://api.hevyapp.com{path}'
               data = json.dumps(body or {}).encode() if body else None
-              req = urllib.request.Request(url, method=method, headers=HEADERS, data=data)
+              req = urllib.request.Request(url, method=method, headers=dict(HEADERS), data=data)
               try:
                   resp = urllib.request.urlopen(req, timeout=10)
-                  return resp.status, resp.read().decode()[:300]
+                  return resp.status, json.loads(resp.read())
               except urllib.error.HTTPError as e:
-                  body = e.read().decode()[:300]
-                  return e.code, body
+                  try: return e.code, json.loads(e.read())
+                  except: return e.code, {'_text': e.read().decode()[:300]}
+              except Exception as e:
+                  return 0, {'_error': str(e)}
 
-          endpoints = [
-              ('POST', '/workout', {'name': 'Test', 'description': ''}),
-              ('POST', '/workout', {'title': 'Test', 'exercises': []}),
-              ('POST', '/v2/workout', {'name': 'Test'}),
-              ('POST', '/workout_event', {}),
-              ('POST', '/workout_events', {}),
-              ('POST', '/start_workout', {}),
-              ('POST', '/end_workout', {}),
-              ('POST', '/complete_workout', {}),
-              ('POST', '/finish_workout', {}),
-              ('POST', '/workout/start', {}),
-              ('POST', '/workout/end', {}),
-              ('POST', '/workout/complete', {}),
-              ('POST', '/workout/finish', {}),
-              ('POST', '/log_workout', {}),
-              ('POST', '/workout_session', {}),
-              ('POST', '/create_workout_event', {}),
-              ('POST', '/workout_exercise', {}),
-              ('POST', '/workout_set', {}),
-              ('POST', '/log_set', {}),
-              ('POST', '/log_exercise', {}),
-              ('POST', '/follow', {'user_id': 'test'}),
-              ('POST', '/unfollow', {'user_id': 'test'}),
-              ('POST', '/like', {'workout_short_id': 'test'}),
-              ('POST', '/comment', {'workout_short_id': 'test', 'comment': 'test'}),
-              ('POST', '/workout_like', {}),
-              ('POST', '/workout_favorite', {}),
-              ('PUT', '/me', {}),
-              ('PATCH', '/me', {}),
-          ]
+          # Step 1: Get exercise templates
+          print('Getting exercise templates...')
+          status, data = call('GET', '/v1/exercise_templates')
+          if status == 200:
+              templates = data if isinstance(data, list) else data.get('exercise_templates', data.get('data', []))
+              print(f'Got {len(templates)} templates')
+              if templates:
+                  ex_id = templates[0].get('id', templates[0].get('exercise_template_id'))
+                  ex_name = templates[0].get('title', '?')
+                  print(f'Using: {ex_id} ({ex_name})')
+              else:
+                  ex_id = '05293BCA'
+          else:
+              print(f'Failed to get templates: {status}')
+              ex_id = '05293BCA'
 
-          print('=== API DISCOVERY RESULTS ===')
-          for method, path, body in endpoints:
-              status, text = probe(method, path, body)
-              if status not in (404, 405):
-                  tag = 'FOUND!' if status in (200, 201, 204, 400, 422, 500) else str(status)
-                  print(f'{tag:8s} {method:6s} {path}')
-                  if text and status != 500:
-                      print(f'         -> {text[:200]}')
-          print('=== DONE ===')
+          # Step 2: Create workout with exact schema
+          print(f'\\nCreating workout with template {ex_id}...')
+          workout_body = {
+              'workout': {
+                  'title': 'API Test Workout',
+                  'description': 'Created via reverse-engineered API',
+                  'start_time': '2026-06-28T15:00:00Z',
+                  'end_time': '2026-06-28T15:30:00Z',
+                  'is_private': True,
+                  'exercises': [{
+                      'exercise_template_id': ex_id,
+                      'superset_id': None,
+                      'notes': 'API test set',
+                      'sets': [{
+                          'type': 'normal',
+                          'weight_kg': 80,
+                          'reps': 10,
+                          'distance_meters': None,
+                          'duration_seconds': None,
+                          'custom_metric': None,
+                          'rpe': 8.0
+                      }]
+                  }]
+              }
+          }
+
+          for path in ['/v1/workout', '/workout', '/v2/workout']:
+              status, response = call('POST', path, workout_body)
+              print(f'POST {path} -> {status}')
+              if status in (200, 201):
+                  print('*** SUCCESS — WORKOUT CREATED! ***')
+                  print(json.dumps(response, indent=2)[:500])
+                  break
+              elif status not in (404, 405):
+                  if isinstance(response, dict):
+                      print(f'  {json.dumps(response)[:400]}')
+                  else:
+                      print(f'  {str(response)[:300]}')
+
+          print('=== DISCOVERY DONE ===')
           "
 
       - name: Update Vercel env vars via REST API
