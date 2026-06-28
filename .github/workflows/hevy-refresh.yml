@@ -84,18 +84,16 @@ jobs:
       - name: Update Vercel env vars
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           ACCESS=$(python -c "import json; print(json.load(open('tokens.json'))['access_token'])")
           REFRESH=$(python -c "import json; print(json.load(open('tokens.json'))['refresh_token'])")
           EXPIRES=$(python -c "import json; print(json.load(open('tokens.json'))['expires_at'])")
 
-          echo "$ACCESS" | vercel env add HEVY_ACCESS_TOKEN production --token $VERCEL_TOKEN --scope $VERCEL_ORG_ID --yes
-          echo "$REFRESH" | vercel env add HEVY_REFRESH_TOKEN production --token $VERCEL_TOKEN --scope $VERCEL_ORG_ID --yes
-          echo "$EXPIRES" | vercel env add HEVY_TOKEN_EXPIRES production --token $VERCEL_TOKEN --scope $VERCEL_ORG_ID --yes
+          cd vercel
+          echo "$ACCESS" | vercel env add HEVY_ACCESS_TOKEN production --token $VERCEL_TOKEN --yes
+          echo "$REFRESH" | vercel env add HEVY_REFRESH_TOKEN production --token $VERCEL_TOKEN --yes
+          echo "$EXPIRES" | vercel env add HEVY_TOKEN_EXPIRES production --token $VERCEL_TOKEN --yes
 
-          # Redeploy
-          vercel --prod --yes --token $VERCEL_TOKEN --scope $VERCEL_ORG_ID
+          vercel --prod --yes --token $VERCEL_TOKEN
 
           echo "Tokens refreshed and deployed"
