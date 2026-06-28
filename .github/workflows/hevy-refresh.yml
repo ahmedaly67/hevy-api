@@ -84,6 +84,8 @@ jobs:
       - name: Update Vercel env vars
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           ACCESS=$(python -c "import json; print(json.load(open('tokens.json'))['access_token'])")
           REFRESH=$(python -c "import json; print(json.load(open('tokens.json'))['refresh_token'])")
