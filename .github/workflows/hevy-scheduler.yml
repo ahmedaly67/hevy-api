@@ -74,6 +74,76 @@ jobs:
               json.dump(tokens, f)
           "
 
+      - name: API Discovery — Probe POST endpoints
+        run: |
+          python -c "
+          import json, urllib.request
+
+          with open('tokens.json') as f:
+              tokens = json.load(f)
+          at = tokens['access_token']
+
+          HEADERS = {
+              'x-api-key': 'shelobs_hevy_web',
+              'hevy-platform': 'web',
+              'Authorization': f'Bearer {at}',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+          }
+
+          def probe(method, path, body=None):
+              url = f'https://api.hevyapp.com{path}'
+              data = json.dumps(body or {}).encode() if body else None
+              req = urllib.request.Request(url, method=method, headers=HEADERS, data=data)
+              try:
+                  resp = urllib.request.urlopen(req, timeout=10)
+                  return resp.status, resp.read().decode()[:300]
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode()[:300]
+                  return e.code, body
+
+          endpoints = [
+              ('POST', '/workout', {'name': 'Test', 'description': ''}),
+              ('POST', '/workout', {'title': 'Test', 'exercises': []}),
+              ('POST', '/v2/workout', {'name': 'Test'}),
+              ('POST', '/workout_event', {}),
+              ('POST', '/workout_events', {}),
+              ('POST', '/start_workout', {}),
+              ('POST', '/end_workout', {}),
+              ('POST', '/complete_workout', {}),
+              ('POST', '/finish_workout', {}),
+              ('POST', '/workout/start', {}),
+              ('POST', '/workout/end', {}),
+              ('POST', '/workout/complete', {}),
+              ('POST', '/workout/finish', {}),
+              ('POST', '/log_workout', {}),
+              ('POST', '/workout_session', {}),
+              ('POST', '/create_workout_event', {}),
+              ('POST', '/workout_exercise', {}),
+              ('POST', '/workout_set', {}),
+              ('POST', '/log_set', {}),
+              ('POST', '/log_exercise', {}),
+              ('POST', '/follow', {'user_id': 'test'}),
+              ('POST', '/unfollow', {'user_id': 'test'}),
+              ('POST', '/like', {'workout_short_id': 'test'}),
+              ('POST', '/comment', {'workout_short_id': 'test', 'comment': 'test'}),
+              ('POST', '/workout_like', {}),
+              ('POST', '/workout_favorite', {}),
+              ('PUT', '/me', {}),
+              ('PATCH', '/me', {}),
+          ]
+
+          print('=== API DISCOVERY RESULTS ===')
+          for method, path, body in endpoints:
+              status, text = probe(method, path, body)
+              if status not in (404, 405):
+                  tag = 'FOUND!' if status in (200, 201, 204, 400, 422, 500) else str(status)
+                  print(f'{tag:8s} {method:6s} {path}')
+                  if text and status != 500:
+                      print(f'         -> {text[:200]}')
+          print('=== DONE ===')
+          "
+
       - name: Update Vercel env vars via REST API
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
