@@ -133,7 +133,8 @@ jobs:
               print(f'Got {len(templates)} templates')
               if templates:
                   ex_id = templates[0].get('id', templates[0].get('exercise_template_id'))
-                  print(f'Using: {ex_id} ({templates[0].get("title","?")})')
+                  ex_name = templates[0].get('title','?')
+                  print('Using: ' + str(ex_id) + ' (' + str(ex_name) + ')')
               else: ex_id = '05293BCA'
           else:
               print(f'Templates failed: {status}')
