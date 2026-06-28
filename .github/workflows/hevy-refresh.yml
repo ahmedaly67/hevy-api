@@ -11,6 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -20,20 +25,18 @@ jobs:
         run: |
           pip install playwright requests
           playwright install --with-deps chromium
+          npm install -g vercel
 
       - name: Refresh Hevy tokens
         env:
           HEVY_EMAIL: ${{ secrets.HEVY_EMAIL }}
           HEVY_PASSWORD: ${{ secrets.HEVY_PASSWORD }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           python -c "
-          import os, json, time, urllib.request
+          import os, json, time
 
           SITE_KEY = '6LfkQG0jAAAAANTrIkVXKPfSPHyJnt4hYPWqxh0R'
-          VERCEL_TOKEN = os.environ['VERCEL_TOKEN']
-          PROJECT_ID = os.environ.get('VERCEL_PROJECT_ID', 'prj_vF0FFLgTH9fymYkGRZ1UQUCQ3Iqs')
 
           from playwright.sync_api import sync_playwright
           with sync_playwright() as p:
@@ -73,44 +76,30 @@ jobs:
           tokens = result['data']
           print(f'Login OK. Expires: {tokens[\"expires_at\"]}')
 
-          # Update Vercel env vars via REST API
-          def vercel_api(method, endpoint, body=None):
-              url = f'https://api.vercel.com/v9/projects/{PROJECT_ID}{endpoint}'
-              headers = {'Authorization': f'Bearer {VERCEL_TOKEN}', 'Content-Type': 'application/json'}
-              req = urllib.request.Request(url, method=method, headers=headers)
-              if body:
-                  req.data = json.dumps(body).encode()
-              resp = urllib.request.urlopen(req)
-              return json.loads(resp.read())
-
-          # Get existing env vars to find their IDs
-          envs = vercel_api('GET', '/env?decrypt=true')
-          env_map = {e['key']: e['id'] for e in envs.get('envs', [])}
-
-          # Update each env var
-          for key, val in [
-              ('HEVY_ACCESS_TOKEN', tokens['access_token']),
-              ('HEVY_REFRESH_TOKEN', tokens['refresh_token']),
-              ('HEVY_TOKEN_EXPIRES', tokens['expires_at']),
-          ]:
-              env_id = env_map.get(key)
-              if env_id:
-                  vercel_api('PATCH', f'/env/{env_id}', {'value': val, 'type': 'secret'})
-                  print(f'  Updated {key}')
-              else:
-                  vercel_api('POST', '/env', {'key': key, 'value': val, 'type': 'secret', 'target': ['production']})
-                  print(f'  Created {key}')
-
-          # Redeploy to pick up new env vars
-          print('Redeploying...')
-          vercel_api('POST', '/deployments', {
-              'name': 'hevy-vercel',
-              'target': 'production',
-              'projectSettings': {'framework': 'nextjs'},
-          })
-          print('Done! Tokens refreshed and deployed.')
+          # Write tokens to a file for the Vercel CLI step
+          with open('tokens.json', 'w') as f:
+              json.dump(tokens, f)
           "
 
-      - name: Notify on failure
-        if: failure()
-        run: echo "Hevy token refresh failed"
+      - name: Update Vercel env vars
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          TOKENS=$(cat tokens.json)
+          ACCESS=$(echo $TOKENS | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          REFRESH=$(echo $TOKENS | python -c "import sys,json; print(json.load(sys.stdin)['refresh_token'])")
+          EXPIRES=$(echo $TOKENS | python -c "import sys,json; print(json.load(sys.stdin)['expires_at'])")
+
+          cd vercel
+          echo "$ACCESS" | vercel env rm HEVY_ACCESS_TOKEN production --yes --token $VERCEL_TOKEN || true
+          echo "$ACCESS" | vercel env add HEVY_ACCESS_TOKEN production --token $VERCEL_TOKEN --yes
+
+          echo "$REFRESH" | vercel env rm HEVY_REFRESH_TOKEN production --yes --token $VERCEL_TOKEN || true
+          echo "$REFRESH" | vercel env add HEVY_REFRESH_TOKEN production --token $VERCEL_TOKEN --yes
+
+          echo "$EXPIRES" | vercel env rm HEVY_TOKEN_EXPIRES production --yes --token $VERCEL_TOKEN || true
+          echo "$EXPIRES" | vercel env add HEVY_TOKEN_EXPIRES production --token $VERCEL_TOKEN --yes
+
+          echo "Vercel env vars updated"
