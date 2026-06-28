@@ -150,6 +150,15 @@ export class HevyClient {
     return this.request<T>("POST", path, body);
   }
 
+  // Raw request — exposes any method/path for debugging
+  async rawRequest(method: string, path: string, body?: unknown): Promise<any> {
+    try {
+      return await this.request<any>(method, path, body);
+    } catch (e: any) {
+      return { _error: e.message, _status: e.message?.match(/Hevy API error: (\d+)/)?.[1] };
+    }
+  }
+
   // ── Account ──
   getMyAccount() { return this._get<any>("/user/account"); }
   getMySubscription() { return this._get<{ is_pro: boolean }>("/user_subscription"); }

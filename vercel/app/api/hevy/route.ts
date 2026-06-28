@@ -21,6 +21,40 @@ function getClient() {
   return new HevyClient(() => readTokens());
 }
 
+// POST handler — forwards requests to Hevy API
+export async function POST(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const path = searchParams.get("_path") || "";
+
+  try {
+    const client = getClient();
+    const body = await request.json().catch(() => ({}));
+
+    // Special probe mode
+    if (path === "probe_all") {
+      const results: Record<string, any> = {};
+      const endpoints = body.endpoints || [];
+
+      for (const ep of endpoints) {
+        const key = `${ep.method || "POST"} ${ep.path}`;
+        try {
+          const res = await client.rawRequest(ep.method || "POST", ep.path, ep.body || {});
+          results[key] = res;
+        } catch (e: any) {
+          results[key] = { error: e.message };
+        }
+      }
+      return NextResponse.json({ results });
+    }
+
+    // General POST forwarding
+    const data = await client.rawRequest("POST", path, body);
+    return NextResponse.json(data);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const path = searchParams.get("_path") || "";
