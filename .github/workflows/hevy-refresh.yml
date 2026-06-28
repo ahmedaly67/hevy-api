@@ -1,0 +1,112 @@
+name: Refresh Hevy Tokens
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # every 10 minutes
+  workflow_dispatch:         # manual trigger
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install playwright requests
+          playwright install --with-deps chromium
+
+      - name: Refresh Hevy tokens
+        env:
+          HEVY_EMAIL: ${{ secrets.HEVY_EMAIL }}
+          HEVY_PASSWORD: ${{ secrets.HEVY_PASSWORD }}
+          VERCEL_KV_REST_API_URL: ${{ secrets.VERCEL_KV_REST_API_URL }}
+          VERCEL_KV_REST_API_TOKEN: ${{ secrets.VERCEL_KV_REST_API_TOKEN }}
+        run: |
+          python -c "
+          import os, json, time
+          from playwright.sync_api import sync_playwright
+
+          SITE_KEY = '6LfkQG0jAAAAANTrIkVXKPfSPHyJnt4hYPWqxh0R'
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page()
+              page.goto('https://hevy.com/login', wait_until='networkidle', timeout=15000)
+              page.wait_for_timeout(2000)
+
+              # Generate reCAPTCHA
+              token = page.evaluate('''(sk) => {
+                  return new Promise((res, rej) => {
+                      grecaptcha.enterprise.ready(() => {
+                          grecaptcha.enterprise.execute(sk, {action: 'login'}).then(res).catch(rej);
+                      });
+                  });
+              }''', SITE_KEY)
+
+              # Login from browser context
+              result = page.evaluate('''([email, passwd, t]) => {
+                  return fetch('https://api.hevyapp.com/login', {
+                      method: 'POST',
+                      headers: {
+                          'x-api-key': 'shelobs_hevy_web',
+                          'hevy-platform': 'web',
+                          'x-client-time': String(Date.now() / 1000),
+                          'Content-Type': 'application/json',
+                          'Accept': 'application/json',
+                      },
+                      body: JSON.stringify({
+                          emailOrUsername: email,
+                          password: passwd,
+                          recaptchaToken: t,
+                      }),
+                  }).then(r => r.json().then(data => ({status: r.status, data})));
+              }''', [os.environ['HEVY_EMAIL'], os.environ['HEVY_PASSWORD'], token])
+
+              browser.close()
+
+          if result['status'] != 200:
+              print(f'Login failed: {result[\"data\"]}')
+              exit(1)
+
+          data = result['data']
+          print(f'Login OK. User: {data[\"user_id\"][:12]}...')
+
+          # Build token object
+          tokens = {
+              'user_id': data['user_id'],
+              'access_token': data['access_token'],
+              'refresh_token': data['refresh_token'],
+              'expires_at': data['expires_at'],
+          }
+
+          token_json = json.dumps(tokens)
+
+          # Upload to Vercel KV if configured
+          kv_url = os.environ.get('VERCEL_KV_REST_API_URL', '')
+          kv_token = os.environ.get('VERCEL_KV_REST_API_TOKEN', '')
+          if kv_url and kv_token:
+              import urllib.request
+              url = f'{kv_url}/set/hevy_tokens'
+              req = urllib.request.Request(url, data=token_json.encode(), method='POST')
+              req.add_header('Authorization', f'Bearer {kv_token}')
+              req.add_header('Content-Type', 'application/json')
+              urllib.request.urlopen(req)
+              print('Tokens uploaded to Vercel KV')
+          else:
+              # Fallback: print token JSON for manual setup
+              print('No Vercel KV configured. Token for manual setup:')
+              print(f'HEVY_TOKENS={token_json}')
+          "
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log("Hevy token refresh failed — need to re-login manually!");

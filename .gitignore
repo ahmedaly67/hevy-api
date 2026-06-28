@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+*.egg
+
+# Tokens & secrets
+*.json
+!package.json
+!tsconfig.json
+.hevy_tokens.json
+test_tokens.json
+deploy_tokens.json
+
+# Node
+node_modules/
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel/
+
+# Environment
+.env
+.env.local
+.env.production
