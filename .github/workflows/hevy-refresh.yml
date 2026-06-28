@@ -11,11 +11,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -25,7 +20,6 @@ jobs:
         run: |
           pip install playwright requests
           playwright install --with-deps chromium
-          npm install -g vercel
 
       - name: Refresh Hevy tokens
         env:
@@ -81,21 +75,51 @@ jobs:
               json.dump(tokens, f)
           "
 
-      - name: Update Vercel env vars
+      - name: Update Vercel env vars via REST API
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          ACCESS=$(python -c "import json; print(json.load(open('tokens.json'))['access_token'])")
-          REFRESH=$(python -c "import json; print(json.load(open('tokens.json'))['refresh_token'])")
-          EXPIRES=$(python -c "import json; print(json.load(open('tokens.json'))['expires_at'])")
+          python -c "
+          import json, os, urllib.request
 
-          cd vercel
-          echo "$ACCESS" | vercel env add HEVY_ACCESS_TOKEN production --token $VERCEL_TOKEN --yes
-          echo "$REFRESH" | vercel env add HEVY_REFRESH_TOKEN production --token $VERCEL_TOKEN --yes
-          echo "$EXPIRES" | vercel env add HEVY_TOKEN_EXPIRES production --token $VERCEL_TOKEN --yes
+          TOKEN = os.environ['VERCEL_TOKEN']
+          PROJECT = os.environ['VERCEL_PROJECT_ID']
 
-          vercel --prod --yes --token $VERCEL_TOKEN
+          with open('tokens.json') as f:
+              tokens = json.load(f)
 
-          echo "Tokens refreshed and deployed"
+          def call(method, path, body=None):
+              url = f'https://api.vercel.com/v10/projects/{PROJECT}{path}'
+              hdrs = {'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json'}
+              data = json.dumps(body).encode() if body else None
+              req = urllib.request.Request(url, method=method, headers=hdrs, data=data)
+              try:
+                  resp = urllib.request.urlopen(req)
+                  return json.loads(resp.read())
+              except urllib.error.HTTPError as e:
+                  print(f'  API error {e.code}: {e.read().decode()[:300]}')
+                  raise
+
+          # First, get current env vars
+          resp = call('GET', '/env')
+          env_map = {e['key']: e['id'] for e in resp.get('envs', [])}
+
+          updates = [
+              ('HEVY_ACCESS_TOKEN', tokens['access_token']),
+              ('HEVY_REFRESH_TOKEN', tokens['refresh_token']),
+              ('HEVY_TOKEN_EXPIRES', tokens['expires_at']),
+          ]
+
+          for key, val in updates:
+              eid = env_map.get(key)
+              if eid:
+                  call('PATCH', f'/env/{eid}', {'value': val, 'type': 'secret'})
+                  print(f'  Updated {key}')
+              else:
+                  call('POST', '/env', {'key': key, 'value': val, 'type': 'secret', 'target': ['production']})
+                  print(f'  Created {key}')
+
+          print('Env vars updated. Vercel will auto-redeploy.')
+          "
+          echo "Tokens refreshed and pushed to Vercel"
