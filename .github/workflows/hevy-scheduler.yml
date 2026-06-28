@@ -104,12 +104,15 @@ jobs:
               except Exception as e:
                   return 0, {'_error': str(e)}
 
-          # Step 1: Get exercise templates
+          # Step 1: Get exercise templates (try multiple paths)
           print('Getting exercise templates...')
-          status, data = call('GET', '/v1/exercise_templates')
+          status, data = (0, None)
+          for ep in ['/v1/exercise_templates', '/exercise_templates', '/exercise-templates', '/custom_exercise_templates']:
+              status, data = call('GET', ep)
+              if status == 200: break
           if status == 200:
               templates = data if isinstance(data, list) else data.get('exercise_templates', data.get('data', []))
-              print(f'Got {len(templates)} templates')
+              print(f'Got {len(templates)} templates from {ep}')
               if templates:
                   ex_id = templates[0].get('id', templates[0].get('exercise_template_id'))
                   ex_name = templates[0].get('title', '?')
@@ -120,44 +123,50 @@ jobs:
               print(f'Failed to get templates: {status}')
               ex_id = '05293BCA'
 
-          # Step 2: Create workout with exact schema
-          print(f'\\nCreating workout with template {ex_id}...')
-          workout_body = {
-              'workout': {
-                  'title': 'API Test Workout',
-                  'description': 'Created via reverse-engineered API',
-                  'start_time': '2026-06-28T15:00:00Z',
-                  'end_time': '2026-06-28T15:30:00Z',
-                  'is_private': True,
-                  'exercises': [{
-                      'exercise_template_id': ex_id,
-                      'superset_id': None,
-                      'notes': 'API test set',
-                      'sets': [{
-                          'type': 'normal',
-                          'weight_kg': 80,
-                          'reps': 10,
-                          'distance_meters': None,
-                          'duration_seconds': None,
-                          'custom_metric': None,
-                          'rpe': 8.0
-                      }]
-                  }]
-              }
+          # Step 2: Try workout creation with multiple path/body variations
+          print(f'Creating workout with template {ex_id}...')
+          
+          base_exercise = {
+              'exercise_template_id': ex_id,
+              'superset_id': None,
+              'notes': 'API test set',
+              'sets': [{
+                  'type': 'normal', 'weight_kg': 80, 'reps': 10,
+                  'distance_meters': None, 'duration_seconds': None,
+                  'custom_metric': None, 'rpe': 8.0
+              }]
           }
 
-          for path in ['/v1/workout', '/workout', '/v2/workout']:
-              status, response = call('POST', path, workout_body)
-              print(f'POST {path} -> {status}')
+          attempts = [
+              # Try exact Swagger format on different paths
+              ('/v1/workout', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
+              ('/workout', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
+              ('/v2/workout', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
+              # Try without workout wrapper
+              ('/workout', {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}),
+              ('/v2/workout', {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}),
+              # Try v1/workouts plural
+              ('/v1/workouts', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
+              # Try /workouts plural with wrapper
+              ('/workouts', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
+              # Try with query params
+              ('/workout?sendSyncEventToMobileApp=true', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
+              # Try with just exercises (minimal)
+              ('/workout', {'workout': {'title': 'API Test', 'exercises': [base_exercise]}}),
+          ]
+
+          for path, body in attempts:
+              status, response = call('POST', path, body)
               if status in (200, 201):
-                  print('*** SUCCESS — WORKOUT CREATED! ***')
+                  print(f'*** SUCCESS: POST {path} -> {status} ***')
                   print(json.dumps(response, indent=2)[:500])
                   break
               elif status not in (404, 405):
                   if isinstance(response, dict):
-                      print(f'  {json.dumps(response)[:400]}')
+                      resp_text = json.dumps(response)[:300]
                   else:
-                      print(f'  {str(response)[:300]}')
+                      resp_text = str(response)[:300]
+                  print(f'  POST {path} -> {status}: {resp_text}')
 
           print('=== DISCOVERY DONE ===')
           "
