@@ -114,10 +114,10 @@ jobs:
           for key, val in updates:
               eid = env_map.get(key)
               if eid:
-                  call('PATCH', f'/env/{eid}', {'value': val, 'type': 'secret'})
+                  call('PATCH', f'/env/{eid}', {'value': val, 'type': 'sensitive'})
                   print(f'  Updated {key}')
               else:
-                  call('POST', '/env', {'key': key, 'value': val, 'type': 'secret', 'target': ['production']})
+                  call('POST', '/env', {'key': key, 'value': val, 'type': 'sensitive', 'target': ['production']})
                   print(f'  Created {key}')
 
           print('Env vars updated. Vercel will auto-redeploy.')
