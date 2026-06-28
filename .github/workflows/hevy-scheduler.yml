@@ -1,4 +1,4 @@
-name: Refresh Hevy Tokens (every 10 min)
+name: Hevy Token Scheduler
 
 on:
   schedule:
@@ -70,7 +70,6 @@ jobs:
           tokens = result['data']
           print(f'Login OK. Expires: {tokens[\"expires_at\"]}')
 
-          # Write tokens to a file for the Vercel CLI step
           with open('tokens.json', 'w') as f:
               json.dump(tokens, f)
           "
@@ -101,7 +100,6 @@ jobs:
                   print(f'  API error {e.code}: {e.read().decode()[:300]}')
                   raise
 
-          # First, get current env vars
           resp = call('GET', '/env')
           env_map = {e['key']: e['id'] for e in resp.get('envs', [])}
 
