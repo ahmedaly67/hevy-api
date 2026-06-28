@@ -1,6 +1,6 @@
 # Hevy API Client
 
-Reverse-engineered private API client + Vercel proxy for the [Hevy](https://hevy.com) workout tracker. Auto-refreshes tokens every 10 minutes via GitHub Actions. **$0 cost.**
+Reverse-engineered private API client + Vercel proxy for the [Hevy](https://hevy.com) workout tracker. Auto-refreshes tokens via GitHub Actions. **$0 cost.**
 
 ## What this gives you
 
@@ -13,13 +13,13 @@ git clone https://github.com/ahmedaly67/hevy-api.git
 cd hevy-api
 ```
 
-Then follow **[SETUP.md](SETUP.md)** — a 6-step guide covering:
+Then follow **[SETUP.md](SETUP.md)** — the full deployment guide covering:
 
 1. Install dependencies
-2. Test locally with Python
+2. Test locally with the Python client
 3. Deploy to **your own** Vercel account
 4. Set up GitHub repo with your own secrets
-5. Enable auto-refresh (GitHub Actions every 10 min)
+5. Enable auto-refresh (GitHub Actions scheduler)
 6. Use the API from your dashboard
 
 **Each person deploys to their own Vercel account with their own Hevy login.** No shared credentials.
@@ -49,10 +49,10 @@ fetch('https://YOUR-DEPLOYMENT.vercel.app/api/hevy?_path=profile&username=allsta
 ## How it works
 
 ```
-Your GitHub Actions (every 10 min, free)
+Your GitHub Actions (scheduled, free)
   ├── Headless Chrome → logs into Hevy (your credentials)
   ├── Gets fresh API tokens
-  └── Pushes tokens to your Vercel project
+  └── Pushes tokens to your Vercel project via REST API
          │
          ▼
 Your Vercel deployment
@@ -63,9 +63,13 @@ Your Vercel deployment
 
 | File | Purpose |
 |------|---------|
-| `hevy.py` | Python client library (25+ endpoints) |
-| `hevy_login.py` | Headless login script |
-| `vercel/` | Next.js API proxy |
-| `.github/workflows/hevy-refresh.yml` | Auto-refresh cron |
+| `hevy.py` | Python client library (25+ endpoints, full dataclass models) |
+| `hevy_login.py` | One-shot headless login script (solves reCAPTCHA via Playwright) |
+| `vercel/` | Next.js API proxy — deploy to Vercel |
+| `.github/workflows/hevy-scheduler.yml` | Auto-refresh scheduler + manual dispatch |
+| `demo.py` | Python client usage demo |
 | `SETUP.md` | Full deployment guide |
-| `hevy-api-reference.md` | Full API surface docs |
+
+## Alternatives
+
+If GitHub's schedule doesn't activate for your repo (happens with force-pushes), use a free external cron like [cron-job.org](https://cron-job.org) to trigger the workflow dispatch. See SETUP.md for details.
