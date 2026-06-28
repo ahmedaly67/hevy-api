@@ -120,6 +120,32 @@ jobs:
                   call('POST', '/env', {'key': key, 'value': val, 'type': 'sensitive', 'target': ['production']})
                   print(f'  Created {key}')
 
-          print('Env vars updated. Vercel will auto-redeploy.')
+          print('Env vars updated.')
           "
-          echo "Tokens refreshed and pushed to Vercel"
+
+      - name: Redeploy Vercel (pick up new env vars)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          python -c "
+          import json, urllib.request
+          TOKEN = '${VERCEL_TOKEN}'
+          PROJECT = '${VERCEL_PROJECT_ID}'
+
+          # Trigger a redeploy via Vercel API
+          url = f'https://api.vercel.com/v13/deployments'
+          body = json.dumps({
+              'name': 'hevy-vercel',
+              'target': 'production',
+              'project': PROJECT,
+              'projectSettings': {'framework': 'nextjs'},
+          }).encode()
+
+          req = urllib.request.Request(url, method='POST',
+              headers={'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json'},
+              data=body)
+          resp = json.loads(urllib.request.urlopen(req).read())
+          print(f'Redeploy triggered: {resp.get(\"url\", \"?\")}')
+          "
+          echo "Redeploy triggered — tokens will be live in ~30s"
