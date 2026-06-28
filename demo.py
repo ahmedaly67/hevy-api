@@ -5,8 +5,8 @@ Run with: python demo.py
 from hevy import from_token, HevyClient
 
 # Use a token obtained from the browser session
-TOKEN = "QEyiw442C2jhZgQxz7hU/LtFvWCotLmuvMIanVmP"
-USER_ID = "f6f07f54-da89-42fc-92ca-5fcde1372b02"
+TOKEN = "your_access_token_here"
+USER_ID = "your_user_id_here"
 
 client = from_token(TOKEN, USER_ID)
 

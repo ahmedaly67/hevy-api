@@ -134,7 +134,7 @@ echo "ACCESS_TOKEN_VALUE" | vercel env add HEVY_ACCESS_TOKEN production --yes
 echo "REFRESH_TOKEN_VALUE" | vercel env add HEVY_REFRESH_TOKEN production --yes
 echo "EXPIRES_AT_VALUE" | vercel env add HEVY_TOKEN_EXPIRES production --yes
 vercel env add HEVY_USER_ID production --yes
-# → when prompted, paste: f6f07f54-da89-42fc-92ca-5fcde1372b02
+# → when prompted, paste: your-user-id-from-hevy
 
 # Redeploy to pick up env vars
 vercel --prod --yes
