@@ -2,7 +2,7 @@ name: Refresh Hevy Tokens (every 10 min)
 
 on:
   schedule:
-    - cron: "*/2 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
