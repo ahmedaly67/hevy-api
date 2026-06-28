@@ -1,84 +1,71 @@
 # Hevy API Client
 
-Reverse-engineered private API client + Vercel proxy for the [Hevy](https://hevy.com) workout tracker. Auto-refreshes every 10 minutes via GitHub Actions. **$0 cost.**
+Reverse-engineered private API client + Vercel proxy for the [Hevy](https://hevy.com) workout tracker. Auto-refreshes tokens every 10 minutes via GitHub Actions. **$0 cost.**
 
-## Quick Start (to use the hosted API)
+## What this gives you
 
-Your friend's API is live at:
+A live API endpoint that serves your Hevy workout data — usable from any website, dashboard, or app. The GitHub Action keeps it alive by refreshing tokens automatically.
 
+## Quick Start
+
+```bash
+git clone https://github.com/ahmedaly67/hevy-api.git
+cd hevy-api
 ```
-https://vercel-nine-xi-30.vercel.app/api/hevy
-```
 
-### Endpoints
+Then follow **[SETUP.md](SETUP.md)** — a 6-step guide covering:
+
+1. Install dependencies
+2. Test locally with Python
+3. Deploy to **your own** Vercel account
+4. Set up GitHub repo with your own secrets
+5. Enable auto-refresh (GitHub Actions every 10 min)
+6. Use the API from your dashboard
+
+**Each person deploys to their own Vercel account with their own Hevy login.** No shared credentials.
+
+## API Endpoints
+
+Once deployed, your API will have these endpoints:
 
 | `?path=` | Extra params | Returns |
 |-----------|-------------|---------|
 | `me` | — | Your Hevy account |
-| `profile` | `&username=allstar` | Any user's profile, routines, workout history |
-| `workout` | `&shortId=y8KlgFRgNLH` | Full workout detail (sets, reps, weights, HR) |
+| `profile` | `&username=allstar` | Any user's profile |
+| `workout` | `&shortId=xxx` | Full workout (sets, reps, weights) |
 | `users` | — | Recommended users |
 | `workouts` | — | Feed |
 | `routines` | — | Your routines |
 | `health` | — | Status check |
 
-### Usage (from any website/app)
+## Usage
 
 ```javascript
-// Get a user's profile
-const res = await fetch(
-  'https://vercel-nine-xi-30.vercel.app/api/hevy?_path=profile&username=allstar'
-);
-const profile = await res.json();
-// → { username: "allstar", workout_count: 1835, follower_count: 12578, ... }
+fetch('https://YOUR-DEPLOYMENT.vercel.app/api/hevy?_path=profile&username=allstar')
+  .then(r => r.json())
+  .then(profile => console.log(profile.workout_count));
 ```
-
-```python
-import requests
-
-r = requests.get(
-    'https://vercel-nine-xi-30.vercel.app/api/hevy',
-    params={'_path': 'profile', 'username': 'allstar'}
-)
-print(r.json()['workout_count'])  # 1835
-```
-
----
-
-## Setup your own instance
-
-Follow [SETUP.md](SETUP.md) for a complete step-by-step guide. You'll need:
-- A Hevy account
-- A GitHub account
-- A Vercel account (free)
-
-Takes ~15 minutes.
-
----
 
 ## How it works
 
 ```
-GitHub Actions (every 10 min)
-  ├── Headless Chrome → logs into Hevy
+Your GitHub Actions (every 10 min, free)
+  ├── Headless Chrome → logs into Hevy (your credentials)
   ├── Gets fresh API tokens
-  ├── Pushes tokens to Vercel env vars via REST API
-  └── Triggers Vercel redeploy
+  └── Pushes tokens to your Vercel project
          │
          ▼
-Vercel (hosts the API proxy)
-  └── Reads fresh tokens → serves Hevy data
+Your Vercel deployment
+  └── Serves your Hevy data via HTTP API
 ```
-
----
 
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `hevy.py` | Python client library (25+ endpoints) |
-| `hevy_login.py` | Headless login script (solves reCAPTCHA via Playwright) |
+| `hevy_login.py` | Headless login script |
 | `vercel/` | Next.js API proxy |
-| `.github/workflows/hevy-refresh.yml` | Auto-refresh every 10 min |
+| `.github/workflows/hevy-refresh.yml` | Auto-refresh cron |
 | `SETUP.md` | Full deployment guide |
-| `hevy-api-reference.md` | Complete API surface docs |
+| `hevy-api-reference.md` | Full API surface docs |
