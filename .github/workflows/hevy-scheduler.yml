@@ -104,69 +104,59 @@ jobs:
               except Exception as e:
                   return 0, {'_error': str(e)}
 
-          # Step 1: Get exercise templates (try multiple paths)
+          # Step 1: Get exercise templates
+          def call2(method, path, body=None, no_api_key=False):
+              url = f'https://api.hevyapp.com{path}'
+              hdrs = dict(HEADERS)
+              if no_api_key:
+                  del hdrs['x-api-key']
+              data = json.dumps(body or {}).encode() if body else None
+              req = urllib.request.Request(url, method=method, headers=hdrs, data=data)
+              try:
+                  resp = urllib.request.urlopen(req, timeout=10)
+                  return resp.status, json.loads(resp.read())
+              except urllib.error.HTTPError as e:
+                  try: return e.code, json.loads(e.read())
+                  except: return e.code, {'_text': e.read().decode()[:300]}
+              except Exception as e:
+                  return 0, {'_error': str(e)}
+
           print('Getting exercise templates...')
-          status, data = (0, None)
-          for ep in ['/v1/exercise_templates', '/exercise_templates', '/exercise-templates', '/custom_exercise_templates']:
-              status, data = call('GET', ep)
-              if status == 200: break
+          status, data = call2('GET', '/v1/exercise_templates')
+          if status == 401:
+              status, data = call2('GET', '/v1/exercise_templates', no_api_key=True)
+          if status == 401:
+              status, data = call('GET', '/exercise_templates')
+          
           if status == 200:
               templates = data if isinstance(data, list) else data.get('exercise_templates', data.get('data', []))
-              print(f'Got {len(templates)} templates from {ep}')
+              print(f'Got {len(templates)} templates')
               if templates:
                   ex_id = templates[0].get('id', templates[0].get('exercise_template_id'))
-                  ex_name = templates[0].get('title', '?')
-                  print(f'Using: {ex_id} ({ex_name})')
-              else:
-                  ex_id = '05293BCA'
+                  print(f'Using: {ex_id} ({templates[0].get("title","?")})')
+              else: ex_id = '05293BCA'
           else:
-              print(f'Failed to get templates: {status}')
+              print(f'Templates failed: {status}')
               ex_id = '05293BCA'
 
-          # Step 2: Try workout creation with multiple path/body variations
-          print(f'Creating workout with template {ex_id}...')
+          # Step 2: Create workout
+          print(f'Creating workout...')
+          s = {'type': 'normal', 'weight_kg': 80, 'reps': 10, 'distance_meters': None, 'duration_seconds': None, 'custom_metric': None, 'rpe': 8.0}
+          ex = {'exercise_template_id': ex_id, 'superset_id': None, 'notes': 'API test', 'sets': [s]}
+          body = {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [ex]}
           
-          base_exercise = {
-              'exercise_template_id': ex_id,
-              'superset_id': None,
-              'notes': 'API test set',
-              'sets': [{
-                  'type': 'normal', 'weight_kg': 80, 'reps': 10,
-                  'distance_meters': None, 'duration_seconds': None,
-                  'custom_metric': None, 'rpe': 8.0
-              }]
-          }
-
-          attempts = [
-              # Try exact Swagger format on different paths
-              ('/v1/workout', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
-              ('/workout', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
-              ('/v2/workout', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
-              # Try without workout wrapper
-              ('/workout', {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}),
-              ('/v2/workout', {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}),
-              # Try v1/workouts plural
-              ('/v1/workouts', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
-              # Try /workouts plural with wrapper
-              ('/workouts', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
-              # Try with query params
-              ('/workout?sendSyncEventToMobileApp=true', {'workout': {'title': 'API Test', 'description': '', 'start_time': '2026-06-28T15:00:00Z', 'end_time': '2026-06-28T15:30:00Z', 'is_private': True, 'exercises': [base_exercise]}}),
-              # Try with just exercises (minimal)
-              ('/workout', {'workout': {'title': 'API Test', 'exercises': [base_exercise]}}),
-          ]
-
-          for path, body in attempts:
-              status, response = call('POST', path, body)
-              if status in (200, 201):
-                  print(f'*** SUCCESS: POST {path} -> {status} ***')
-                  print(json.dumps(response, indent=2)[:500])
-                  break
-              elif status not in (404, 405):
-                  if isinstance(response, dict):
-                      resp_text = json.dumps(response)[:300]
-                  else:
-                      resp_text = str(response)[:300]
-                  print(f'  POST {path} -> {status}: {resp_text}')
+          for path in ['/v1/workouts', '/v1/workout']:
+              for wrapper in [False, True]:
+                  bd = {'workout': body} if wrapper else body
+                  for no_key in [False, True]:
+                      status, resp = call2('POST', path, bd, no_api_key=no_key)
+                      if status in (200, 201):
+                          print(f'*** SUCCESS! POST {path} -> {status} ***')
+                          print(json.dumps(resp, indent=2)[:500])
+                          raise SystemExit(0)
+                      elif status not in (404, 405):
+                          r = json.dumps(resp)[:200] if isinstance(resp, dict) else str(resp)[:200]
+                          print(f'  POST {path} (wrap={wrapper}, key={not no_key}) -> {status}: {r}')
 
           print('=== DISCOVERY DONE ===')
           "
