@@ -123,13 +123,12 @@ jobs:
           print('Env vars updated.')
           "
 
-      - name: Redeploy Vercel (pick up new env vars)
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      - name: Redeploy Vercel (trigger via file change)
         run: |
-          npm install -g vercel > /dev/null 2>&1
-          cd vercel
-          vercel --prod --yes --token $VERCEL_TOKEN --scope $VERCEL_ORG_ID
-          echo "Redeploy triggered — tokens live in ~30s"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          echo "$(date -u)" > vercel/last-refresh.txt
+          git add vercel/last-refresh.txt
+          git commit -m "refresh: $(date -u +%H:%M)"
+          git push origin master
+          echo "Push triggered — Vercel auto-redeploys"
